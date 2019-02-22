@@ -108,20 +108,21 @@ def plot_dataset(data_set, output_directory, file_name, show_plot, save_plot):
     """
 
     # Plot training & validation loss values
-    with plt.style.context(('dark_background')):
-        params = plt.gcf()
-        plSize = params.get_size_inches()
-        params.set_size_inches((plSize[0] * 4, plSize[1]))
-        plt.plot(data_set)
-        plt.title('AAPL to SPY relative performance')
-        plt.ylabel('Price')
-        plt.xlabel('Time')
 
-        if save_plot == True:
-            plt.savefig(output_directory + '/' + file_name + '.jpg', format='jpg', quality=95, dpi=200)
+    plt.rcParams.update({'font.size': 22})
+    params = plt.gcf()
+    plSize = params.get_size_inches()
+    params.set_size_inches((plSize[0] * 4, plSize[1] * 2))
+    plt.plot(data_set)
+    plt.title('AAPL to SPY relative performance')
+    plt.ylabel('Price')
+    plt.xlabel('Time')
 
-        if show_plot == True:
-            plt.show()
+    if save_plot == True:
+        plt.savefig(output_directory + '/' + file_name + '.jpg', format='jpg', quality=95, dpi=200)
+
+    if show_plot == True:
+        plt.show()
 
     plt.close()
 
@@ -143,22 +144,22 @@ def generate_train_dev_plots(history, show_plot, save_plot, output_directory):
     """
 
     # Plot training & validation loss values
-    with plt.style.context(('dark_background')):
-        params = plt.gcf()
-        plSize = params.get_size_inches()
-        params.set_size_inches((plSize[0] * 4, plSize[1]))
-        plt.plot(history.history['root_mean_square_error'])
-        plt.plot(history.history['val_root_mean_square_error'])
-        plt.title('Model loss')
-        plt.ylabel('Loss')
-        plt.xlabel('Epoch')
-        plt.legend(['Train', 'Dev'], loc='upper right')
 
-        if save_plot == True:
-            plt.savefig(output_directory + '/TrainDevLossesPlot.jpg', format='jpg', quality=95, dpi=200)
+    params = plt.gcf()
+    plSize = params.get_size_inches()
+    params.set_size_inches((plSize[0] * 4, plSize[1] * 2))
+    plt.plot(history.history['root_mean_square_error'])
+    plt.plot(history.history['val_root_mean_square_error'])
+    plt.title('Model loss')
+    plt.ylabel('Loss')
+    plt.xlabel('Epoch')
+    plt.legend(['Train', 'Dev'], loc='upper right')
 
-        if show_plot == True:
-            plt.show()
+    if save_plot == True:
+        plt.savefig(output_directory + '/TrainDevLossesPlot.jpg', format='jpg', quality=95, dpi=200)
+
+    if show_plot == True:
+        plt.show()
 
     plt.close()
 
@@ -181,22 +182,21 @@ def plot_real_predicted_data(real_output, predicted_output, output_directory, fi
     """
 
     # Plot real & predicted values
-    with plt.style.context(('dark_background')):
-        params = plt.gcf()
-        plSize = params.get_size_inches()
-        params.set_size_inches((plSize[0] * 4, plSize[1] * 2))
-        plt.plot(predicted_output, color='y')
-        plt.plot(real_output, color='r')
-        plt.title('Real vs Predicted')
-        plt.ylabel('Price')
-        plt.xlabel('Time')
-        plt.legend(['Predicted', 'Real'], loc='upper right')
+    params = plt.gcf()
+    plSize = params.get_size_inches()
+    params.set_size_inches((plSize[0] * 4, plSize[1] * 2))
+    plt.plot(predicted_output, color='y')
+    plt.plot(real_output, color='r')
+    plt.title('Real vs Predicted')
+    plt.ylabel('Price')
+    plt.xlabel('Time')
+    plt.legend(['Predicted', 'Real'], loc='upper right')
 
-        if save_plot == True:
-            plt.savefig(output_directory + '/' + file_name + '.jpg', format='jpg', quality=95, dpi=200)
+    if save_plot == True:
+        plt.savefig(output_directory + '/' + file_name + '.jpg', format='jpg', quality=95, dpi=200)
 
-        if show_plot == True:
-            plt.show()
+    if show_plot == True:
+        plt.show()
 
     plt.close()
 
