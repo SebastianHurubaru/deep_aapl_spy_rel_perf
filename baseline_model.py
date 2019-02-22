@@ -214,7 +214,4 @@ if __name__ == '__main__':
 
     MultiSequentialTraining()
 
-    # Once we found the best configuration, update the hyperparameters in the globals.py
-    # uncomment thjs line, retrain and at the end save all the data
-    #SingleTraining(time_steps=global_time_steps, batch_size=global_batch_size, epochs=global_epochs, lstm_units=global_lstm_units, just_training=False)
 
