@@ -1,2 +1,0 @@
-root_mean_square_error: Train - 0.008808  Dev - 0.006169 Time_steps: 20 Batch_size=128 Epochs: 100 LSTM units: 50 
-root_mean_square_error: Test - 0.007675  Time_steps: 20 Batch_size=128 Epochs: 100 LSTM units: 50 
