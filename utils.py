@@ -17,7 +17,7 @@ from keras.models import load_model
 from keras.preprocessing.sequence import TimeseriesGenerator
 from keras.backend import clear_session
 
-from keras_extensions import root_mean_square_error
+from keras_extensions import root_mean_square_error, theil_u, R, custom_epsilon_mean_absolute_percentage_error
 
 from globals import global_sae_batch_size
 
@@ -262,7 +262,10 @@ def load_prediction_model(output_directory):
 
     # load the full model in h5 format
     model = load_model(output_directory + '/prediction_model.h5',
-               custom_objects={'root_mean_square_error': root_mean_square_error})
+               custom_objects={'root_mean_square_error': root_mean_square_error,
+                               'theil_u': theil_u,
+                               'R': R,
+                               'custom_epsilon_mean_absolute_percentage_error': custom_epsilon_mean_absolute_percentage_error})
     print("Loaded model from disk")
 
     return model
@@ -330,8 +333,8 @@ def plot_real_vs_predicted_data(real_output, predicted_output):
     params = plt.gcf()
     plSize = params.get_size_inches()
     params.set_size_inches((plSize[0] * 4, plSize[1] * 2))
-    plt.plot(predicted_output, color='y')
-    plt.plot(real_output, color='r')
+    plt.plot(predicted_output, color='r')
+    plt.plot(real_output, color='y')
     plt.title('Real vs Predicted')
     plt.ylabel('Relative performance')
     plt.xlabel('Days')

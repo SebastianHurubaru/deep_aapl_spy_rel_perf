@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 
 from keras.models import Sequential, Model
-from keras.layers import Dense, Input
+from keras.layers import Dense, Dropout, Input
 from keras.optimizers import Adam
 from keras import regularizers
 from keras.utils import multi_gpu_model
@@ -11,7 +11,7 @@ from keras_extensions import root_mean_square_error
 from globals import features, encoded_features, labels, base_dir, number_of_gpus
 from utils import create_data_directory, load_and_transform_data, save_model_with_additional_data, run_function_in_separate_process
 
-def create_stacked_auto_encoder_model(time_steps, level1_units, level2_units):
+def create_stacked_auto_encoder_model(time_steps, dropout_rate, l2_reg_rate, level1_units, level2_units):
     """
 
 
@@ -28,22 +28,32 @@ def create_stacked_auto_encoder_model(time_steps, level1_units, level2_units):
         input_layer = Input(shape=(time_steps, features), batch_shape=(None, time_steps, features))
 
         # encoder 1
-        encoding_layer_1 = Dense(level1_units, activation='relu', activity_regularizer=regularizers.l2(0), kernel_initializer='glorot_normal')(input_layer)
+        encoding_layer_1 = Dense(level1_units, activation='relu', activity_regularizer=regularizers.l2(l2_reg_rate),
+                                 kernel_initializer='glorot_normal')(input_layer)
+        encoding_layer_1 = Dropout(dropout_rate)(encoding_layer_1)
 
         # encoder 2
-        encoding_layer_2 = Dense(level2_units, activation='relu', activity_regularizer=regularizers.l2(0), kernel_initializer='glorot_normal')(encoding_layer_1)
+        encoding_layer_2 = Dense(level2_units, activation='relu', activity_regularizer=regularizers.l2(l2_reg_rate),
+                                 kernel_initializer='glorot_normal')(encoding_layer_1)
+        encoding_layer_2 = Dropout(dropout_rate)(encoding_layer_2)
 
         # encoder 3
-        encoding_layer_3 = Dense(encoded_features, activation='relu', activity_regularizer=regularizers.l2(0), kernel_initializer='glorot_normal')(encoding_layer_2)
+        encoding_layer_3 = Dense(encoded_features, activation='relu', activity_regularizer=regularizers.l2(l2_reg_rate),
+                                 kernel_initializer='glorot_normal')(encoding_layer_2)
+        encoding_layer_3 = Dropout(dropout_rate)(encoding_layer_3)
 
         # decoder 1
-        decoding_layer_1 = Dense(level2_units, activation='relu', activity_regularizer=regularizers.l2(0), kernel_initializer='glorot_normal')(encoding_layer_3)
+        decoding_layer_1 = Dense(level2_units, activation='relu', activity_regularizer=regularizers.l2(l2_reg_rate),
+                                 kernel_initializer='glorot_normal')(encoding_layer_3)
+        decoding_layer_1 = Dropout(dropout_rate)(decoding_layer_1)
 
         # decoder 2
-        decoding_layer_2 = Dense(level1_units, activation='relu', activity_regularizer=regularizers.l2(0), kernel_initializer='glorot_normal')(decoding_layer_1)
+        decoding_layer_2 = Dense(level1_units, activation='relu', activity_regularizer=regularizers.l2(l2_reg_rate),
+                                 kernel_initializer='glorot_normal')(decoding_layer_1)
+        decoding_layer_2 = Dropout(dropout_rate)(decoding_layer_2)
 
         # decoded
-        decoded = Dense(features, activation='sigmoid', activity_regularizer=regularizers.l2(0), kernel_initializer='normal')(decoding_layer_2)
+        decoded = Dense(features, activation='sigmoid', kernel_initializer='normal')(decoding_layer_2)
 
         # define model
         model = Model(inputs=input_layer, outputs=decoded)
@@ -65,7 +75,7 @@ def create_stacked_auto_encoder_model(time_steps, level1_units, level2_units):
 
 def Training(model,
              train_X, train_Y, dev_X, dev_Y,
-             time_steps, batch_size, epochs, level1_units, level2_units,
+             time_steps, batch_size, epochs, dropout_rate, l2_reg_rate, level1_units, level2_units,
              scale_type, wavelet_transform_iterations,
              output_directory):
     """
@@ -110,11 +120,11 @@ def Training(model,
     rmse_dev = scores
 
     with open(output_directory + '/stats.txt', 'a') as f:
-        f.write("%s: Train - %.6f  Dev - %.6f Time_steps: %d Batch size: %d Epochs: %d Level 1 units: %d Level 2 units: %d Scale type: %s Wavelet transform iterations: %d\n" %
-                (model.metrics_names[0], rmse_train, rmse_dev, time_steps, batch_size, epochs, level1_units, level2_units, scale_type, wavelet_transform_iterations))
+        f.write("%s: Train - %.6f  Dev - %.6f Time_steps: %d Batch size: %d Epochs: %d Level 1 units: %d Level 2 units: %d Dropout rate: %.2f l2_reg_rate: %.3f Scale type: %s Wavelet transform iterations: %d\n" %
+                (model.metrics_names[0], rmse_train, rmse_dev, time_steps, batch_size, epochs, level1_units, level2_units, dropout_rate, l2_reg_rate, scale_type, wavelet_transform_iterations))
 
 
-def SingleTraining(time_steps, batch_size, epochs, level1_units, level2_units,
+def SingleTraining(time_steps, batch_size, epochs, dropout_rate, l2_reg_rate, level1_units, level2_units,
                    scale_type, wavelet_transform_iterations,
                    output_directory, save_configuration):
     """
@@ -163,7 +173,7 @@ def SingleTraining(time_steps, batch_size, epochs, level1_units, level2_units,
                                                                    encode_features=False,
                                                                    adjust_to_multiple_of_batch_size=adjust_to_multiple_of_batch_size)
 
-    dev_x, dev_y, _, _ = load_and_transform_data('data/dev_X.csv', 'data/dev_Y.csv', time_steps=time_steps, batch_size=batch_size,
+    dev_x, dev_y, _, _ = load_and_transform_data('data/dev_test_X.csv', 'data/dev_test_Y.csv', time_steps=time_steps, batch_size=batch_size,
                                                  scale_type=scale_type, scaler_X=scaler_X, scaler_Y=scaler_Y,
                                                  wavelet_transform_iterations=wavelet_transform_iterations,
                                                  encode_features=False,
@@ -174,7 +184,7 @@ def SingleTraining(time_steps, batch_size, epochs, level1_units, level2_units,
     # we want the output to be the same as the input
     run_function_in_separate_process(CreateAndTrainModel, train_x, train_x, dev_x, dev_x,
                                      time_steps, batch_size,
-                                     epochs, level1_units, level2_units,
+                                     epochs, dropout_rate, l2_reg_rate, level1_units, level2_units,
                                      scale_type,
                                      wavelet_transform_iterations,
                                      output_directory,
@@ -183,7 +193,7 @@ def SingleTraining(time_steps, batch_size, epochs, level1_units, level2_units,
 
 def CreateAndTrainModel(train_X, train_Y, dev_X, dev_Y,
                         time_steps, batch_size,
-                        epochs, level1_units, level2_units,
+                        epochs, dropout_rate, l2_reg_rate, level1_units, level2_units,
                         scale_type,
                         wavelet_transform_iterations,
                         output_directory,
@@ -192,11 +202,12 @@ def CreateAndTrainModel(train_X, train_Y, dev_X, dev_Y,
     np.random.seed(3)
 
     model, encoding_model = create_stacked_auto_encoder_model(time_steps=time_steps,
-                                              level1_units=level1_units, level2_units=level2_units)
+                                                              dropout_rate=dropout_rate, l2_reg_rate=l2_reg_rate,
+                                                              level1_units=level1_units, level2_units=level2_units)
 
     Training(model, train_X, train_Y, dev_X, dev_Y,
              time_steps=time_steps, batch_size=batch_size, epochs=epochs,
-             level1_units=level1_units, level2_units=level2_units,
+             dropout_rate=dropout_rate, l2_reg_rate=l2_reg_rate, level1_units=level1_units, level2_units=level2_units,
              scale_type=scale_type,
              wavelet_transform_iterations=wavelet_transform_iterations,
              output_directory=output_directory)
@@ -224,26 +235,31 @@ def GridSearchTraining():
     data_directory = create_data_directory(base_dir)
 
     time_steps_list = [1, 5, 10]
-    batch_size_list = [64]
-    epochs_list = [1000]
+    batch_size_list = [128]
+    epochs_list = [5000]
+    dropout_rate_list = [0.2]
+    l2_reg_rate_list = [0.0]
     level1_units_list = [15]
     level2_units_list = [12]
     scale_type_list = ['normal']
-    wavelet_transform_iterations_list = [0]
+    wavelet_transform_iterations_list = [0, 2]
 
     for time_steps in time_steps_list:
         for batch_size in batch_size_list:
                 for epochs in epochs_list:
-                    for level1_units in level1_units_list:
-                        for level2_units in level2_units_list:
-                            for scale_type in scale_type_list:
-                                for wavelet_transform_iterations in wavelet_transform_iterations_list:
-                                    SingleTraining(time_steps=time_steps, batch_size=batch_size,
-                                                   epochs=epochs, level1_units=level1_units, level2_units=level2_units,
-                                                   output_directory=data_directory,
-                                                   scale_type=scale_type,
-                                                   wavelet_transform_iterations=wavelet_transform_iterations,
-                                                   save_configuration=True)
+                    for dropout_rate in dropout_rate_list:
+                        for l2_reg_rate in l2_reg_rate_list:
+                            for level1_units in level1_units_list:
+                                for level2_units in level2_units_list:
+                                    for scale_type in scale_type_list:
+                                        for wavelet_transform_iterations in wavelet_transform_iterations_list:
+                                            SingleTraining(time_steps=time_steps, batch_size=batch_size,
+                                                           epochs=epochs, dropout_rate=dropout_rate, l2_reg_rate=l2_reg_rate,
+                                                           level1_units=level1_units, level2_units=level2_units,
+                                                           output_directory=data_directory,
+                                                           scale_type=scale_type,
+                                                           wavelet_transform_iterations=wavelet_transform_iterations,
+                                                           save_configuration=True)
 
 if __name__ == '__main__':
 

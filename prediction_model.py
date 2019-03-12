@@ -5,7 +5,7 @@ from keras.models import Sequential
 from keras.layers import Dense, LSTM, GRU, Dropout
 from keras.optimizers import Adam
 from keras.utils import multi_gpu_model
-from keras_extensions import root_mean_square_error
+from keras_extensions import root_mean_square_error, theil_u, R, custom_epsilon_mean_absolute_percentage_error
 
 from globals import features, encoded_features, labels, base_dir, number_of_gpus
 from globals import global_batch_size, global_encode_features, global_time_steps, global_units\
@@ -61,9 +61,9 @@ def create_sequence_model(model_type, number_of_features, time_steps, batch_size
         # This assumes that the machine has that specified number of available GPUs.
         model = multi_gpu_model(model, gpus=number_of_gpus)
 
-    optimizer = Adam(lr=0.05, decay=0.1)
+    optimizer = Adam(lr=0.05, decay=0.05)
 
-    model.compile(optimizer=optimizer, loss='mse', metrics=[root_mean_square_error])
+    model.compile(optimizer=optimizer, loss='mse', metrics=[root_mean_square_error, theil_u, R, custom_epsilon_mean_absolute_percentage_error])
     model.summary()
 
     return model
@@ -111,14 +111,15 @@ def Training(model,
               shuffle=False)
 
     scores = model.evaluate(x=train_X, y=train_Y, batch_size=batch_size)
-    rmse_train = scores[1]
+    rmse_train, theil_u_train, R_train, mape_train = scores[1], scores[2], scores[3], scores[4]
 
     scores = model.evaluate(x=dev_X, y=dev_Y, batch_size=batch_size)
-    rmse_dev = scores[1]
+    rmse_dev, theil_u_dev, R_dev, mape_dev = scores[1], scores[2], scores[3], scores[4]
 
     with open(output_directory + '/stats.txt', 'a') as f:
-        f.write("%s: Train - %.6f  Dev - %.6f Stateful: %s Time_steps: %d Batch size: %d Epochs: %d Model: %s Units: %d dropout rate: %.1f Scale type: %s Wavelet transform iterations: %d Encode features: %s\n" %
-                (model.metrics_names[1], rmse_train, rmse_dev, str(stateful), time_steps, batch_size, epochs, model_type, units, dropout_rate, scale_type, wavelet_transform_iterations, str(encode_features)))
+        f.write("%s: Train - %.6f %.6f %.6f %.6f Dev - %.6f %.6f %.6f %.6f Stateful: %s Time_steps: %d Batch size: %d Epochs: %d Model: %s Units: %d dropout rate: %.1f Scale type: %s Wavelet transform iterations: %d Encode features: %s\n" %
+                (model.metrics_names[1], rmse_train, mape_train, theil_u_train, R_train, rmse_dev, mape_dev, theil_u_dev, R_dev,
+                 str(stateful), time_steps, batch_size, epochs, model_type, units, dropout_rate, scale_type, wavelet_transform_iterations, str(encode_features)))
 
 
 def SingleTraining(time_steps, batch_size, stateful, epochs, model_type, units, dropout_rate,
@@ -316,13 +317,13 @@ def GridSearchTraining():
 
     data_directory = create_data_directory(base_dir)
 
-    time_steps_list = [1]
+    time_steps_list = [1, 5, 10]
     batch_size_list = [128]
-    stateful_list = [False]
-    epochs_list = [500, 1000]
+    stateful_list = [False, True]
+    epochs_list = [5000]
     model_types_list = ['gru', 'lstm']
     rnn_units_list = [128]
-    dropout_rate_list = [0.1]
+    dropout_rate_list = [0, 0.2]
     scale_type_list = ['normal']
     wavelet_transform_iterations_list = [0, 2]
     encode_features_list = [False, True]
