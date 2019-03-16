@@ -17,7 +17,7 @@ from keras.models import load_model
 from keras.preprocessing.sequence import TimeseriesGenerator
 from keras.backend import clear_session
 
-from keras_extensions import root_mean_square_error, theil_u, R, custom_epsilon_mean_absolute_percentage_error
+from keras_extensions import root_mean_square_error, theil_u, pearson_r, custom_epsilon_mean_absolute_percentage_error
 
 from globals import global_sae_batch_size
 
@@ -264,7 +264,7 @@ def load_prediction_model(output_directory):
     model = load_model(output_directory + '/prediction_model.h5',
                custom_objects={'root_mean_square_error': root_mean_square_error,
                                'theil_u': theil_u,
-                               'R': R,
+                               'pearson_r': pearson_r,
                                'custom_epsilon_mean_absolute_percentage_error': custom_epsilon_mean_absolute_percentage_error})
     print("Loaded model from disk")
 
@@ -486,3 +486,60 @@ def run_function_in_separate_process(func, *args):
 
     result, error = process(func, *args)
     return result, error
+
+def compute_score(y_pred, r):
+
+    """
+
+    Computes the score according to the Kaggle competition: https://www.kaggle.com/c/two-sigma-financial-news#evaluation
+
+    Arguments:
+
+        y_pred -- predictions. Values scaled to be between [-1, 1]
+        r -- relative market return
+
+    Returns:
+
+        score - the computed score
+
+
+    """
+
+    x_t = y_pred * r
+
+    score = np.mean(x_t) / np.std(x_t)
+
+    return score
+
+def compute_profitability(y_true, y_pred):
+    """
+
+    Computes a buy_or_sell trading stategy based on the predictions.
+
+    Arguments:
+
+        y_pred -- predictions.
+        y_true -- real values
+
+    Returns:
+
+        score - the computed score
+
+    """
+
+    length_y = len(y_true)
+    strategy_earnings = 0
+    tran_cost_rate = 0.0001
+
+    for i in range(length_y - 1):
+        if y_pred[i + 1] < y_true[i]:
+            difference = y_true[i] - y_true[i + 1]
+        elif y_pred[i + 1] >= y_true[i]:
+            difference = y_true[i + 1] - y_true[i]
+
+        strategy_earnings += (difference + tran_cost_rate * (y_true[i + 1] + y_true[i])) / y_true[i]
+
+    strategy_earnings = 100 * strategy_earnings
+
+    return strategy_earnings
+

@@ -4,13 +4,15 @@ import numpy as np
 from keras.models import Sequential
 from keras.layers import Dense, LSTM, GRU, Dropout
 from keras.optimizers import Adam
+from keras.regularizers import l2
 from keras.utils import multi_gpu_model
-from keras_extensions import root_mean_square_error, theil_u, R, custom_epsilon_mean_absolute_percentage_error
+from keras_extensions import root_mean_square_error, theil_u, pearson_r, custom_epsilon_mean_absolute_percentage_error
 
 from globals import features, encoded_features, labels, base_dir, number_of_gpus
 from globals import global_batch_size, global_encode_features, global_time_steps, global_units\
     , global_model_type, global_epochs, global_wavelet_transform_iterations, global_dropout_rate, global_stateful, global_scale_type
-from utils import create_data_directory, load_and_transform_data, save_model_with_additional_data, load_additional_data, load_prediction_model, run_function_in_separate_process, plot_real_vs_predicted_data
+from utils import create_data_directory, load_and_transform_data, save_model_with_additional_data, \
+    load_additional_data, load_prediction_model, run_function_in_separate_process, plot_real_vs_predicted_data
 
 
 def create_sequence_model(model_type, number_of_features, time_steps, batch_size, stateful, units, dropout_rate):
@@ -40,18 +42,21 @@ def create_sequence_model(model_type, number_of_features, time_steps, batch_size
         model = Sequential()
         if model_type == 'lstm':
             model.add(LSTM(units, activation='tanh', kernel_initializer='normal',
+                           dropout=dropout_rate, recurrent_dropout=dropout_rate,
+                           activity_regularizer=l2(0.000), recurrent_regularizer=l2(0.000),
                            input_shape=(time_steps, number_of_features),
                            batch_input_shape=(batch_size, time_steps, number_of_features),
                            stateful=stateful,
                            return_sequences=False))
         elif model_type == 'gru':
             model.add(GRU(units, activation='tanh', kernel_initializer='normal',
+                          dropout=dropout_rate, recurrent_dropout=dropout_rate,
+                          activity_regularizer=l2(0.000), recurrent_regularizer=l2(0.000),
                           input_shape=(time_steps, number_of_features),
                           batch_input_shape=(batch_size, time_steps, number_of_features),
                           stateful=stateful,
                           return_sequences=False))
 
-        model.add(Dropout(dropout_rate))
         model.add(Dense(labels, kernel_initializer='normal', activation='sigmoid'))
 
 
@@ -61,9 +66,9 @@ def create_sequence_model(model_type, number_of_features, time_steps, batch_size
         # This assumes that the machine has that specified number of available GPUs.
         model = multi_gpu_model(model, gpus=number_of_gpus)
 
-    optimizer = Adam(lr=0.05, decay=0.05)
+    optimizer = Adam(lr=0.05, decay=0.0005)
 
-    model.compile(optimizer=optimizer, loss='mse', metrics=[root_mean_square_error, theil_u, R, custom_epsilon_mean_absolute_percentage_error])
+    model.compile(optimizer=optimizer, loss='mse', metrics=[root_mean_square_error, theil_u, pearson_r, custom_epsilon_mean_absolute_percentage_error])
     model.summary()
 
     return model
@@ -108,7 +113,7 @@ def Training(model,
               epochs=epochs,
               verbose=2,
               validation_data=(dev_X, dev_Y),
-              shuffle=False)
+              shuffle=True)
 
     scores = model.evaluate(x=train_X, y=train_Y, batch_size=batch_size)
     rmse_train, theil_u_train, R_train, mape_train = scores[1], scores[2], scores[3], scores[4]
@@ -317,13 +322,13 @@ def GridSearchTraining():
 
     data_directory = create_data_directory(base_dir)
 
-    time_steps_list = [1, 5, 10]
-    batch_size_list = [128]
-    stateful_list = [False, True]
-    epochs_list = [5000]
+    time_steps_list = [1]
+    batch_size_list = [64]
+    stateful_list = [False]
+    epochs_list = [2000]
     model_types_list = ['gru', 'lstm']
     rnn_units_list = [128]
-    dropout_rate_list = [0, 0.2]
+    dropout_rate_list = [0, 0.15]
     scale_type_list = ['normal']
     wavelet_transform_iterations_list = [0, 2]
     encode_features_list = [False, True]
@@ -358,6 +363,8 @@ def SingleEvaluation(features_file, labels_file):
         labels_file -- real values corresponding to the givel features
 
     Returns:
+        y -- the real label values
+        predictions -- the corresponding predicted values
 
     """
     scaler_X, scaler_Y = load_additional_data('models')
@@ -381,9 +388,10 @@ def SingleEvaluation(features_file, labels_file):
         y = scaler_Y.inverse_transform(y)
         predictions = scaler_Y.inverse_transform(predictions)
 
-    plot_real_vs_predicted_data(y, predictions)
+    return y, predictions
 
 
 if __name__ == '__main__':
 
     GridSearchTraining()
+
