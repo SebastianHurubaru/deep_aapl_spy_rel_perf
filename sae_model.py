@@ -125,7 +125,7 @@ def Training(model,
 
 
 def SingleTraining(time_steps, batch_size, epochs, dropout_rate, l2_reg_rate, level1_units, level2_units,
-                   scale_type, wavelet_transform_iterations,
+                   scale_type, wavelet_transform_iterations, include_tweets_sentiment,
                    output_directory, save_configuration):
     """
     Wrapper function over Training that previously loads the training and dev sets
@@ -145,6 +145,7 @@ def SingleTraining(time_steps, batch_size, epochs, dropout_rate, l2_reg_rate, le
         If save_configuration parameter is False the directory is created here using the local hyperparameter values
         scale_type -- type of scaling the data. Only Normalization and Standardization are supported
         wavelet_transform_iterations -- number of times to perform wavelet transformation on the input
+        include_tweets_sentiment -- include the tweets sentiment as feature
         save_configuration    -- flag to indicate that we are just training and we do not want to save the plots and the model.
         Used basically when searching for the hyperparameters outputing the best results
 
@@ -164,19 +165,22 @@ def SingleTraining(time_steps, batch_size, epochs, dropout_rate, l2_reg_rate, le
         output_directory = create_data_directory(base_dir + '/sae', time_steps=time_steps, batch_size=batch_size,
                                                  epochs=epochs, level1_units=level1_units, level2_units=level2_units,
                                                  scale_type=scale_type,
-                                                 wavelet_transform_iterations=wavelet_transform_iterations)
+                                                 wavelet_transform_iterations=wavelet_transform_iterations,
+                                                 include_tweets_sentiment=include_tweets_sentiment)
 
     # Based on the scale type apply on the training set the scaling and applying it after to dev and train sets
     train_x, train_y, scaler_X, scaler_Y = load_and_transform_data('data/train_X.csv', 'data/train_Y.csv', time_steps=time_steps, batch_size=batch_size,
                                                                    scale_type=scale_type, scaler_X=None, scaler_Y=None,
                                                                    wavelet_transform_iterations=wavelet_transform_iterations,
                                                                    encode_features=False,
+                                                                   include_tweets_sentiment=include_tweets_sentiment,
                                                                    adjust_to_multiple_of_batch_size=adjust_to_multiple_of_batch_size)
 
     dev_x, dev_y, _, _ = load_and_transform_data('data/dev_test_X.csv', 'data/dev_test_Y.csv', time_steps=time_steps, batch_size=batch_size,
                                                  scale_type=scale_type, scaler_X=scaler_X, scaler_Y=scaler_Y,
                                                  wavelet_transform_iterations=wavelet_transform_iterations,
                                                  encode_features=False,
+                                                 include_tweets_sentiment=include_tweets_sentiment,
                                                  adjust_to_multiple_of_batch_size=adjust_to_multiple_of_batch_size)
 
     # when training we want to create and train the model in a separate process
@@ -234,7 +238,7 @@ def GridSearchTraining():
 
     data_directory = create_data_directory(base_dir)
 
-    time_steps_list = [1, 5, 10]
+    time_steps_list = [1]
     batch_size_list = [128]
     epochs_list = [5000]
     dropout_rate_list = [0.2]
@@ -242,7 +246,8 @@ def GridSearchTraining():
     level1_units_list = [15]
     level2_units_list = [12]
     scale_type_list = ['normal']
-    wavelet_transform_iterations_list = [0, 2]
+    wavelet_transform_iterations_list = [1]
+    include_tweets_sentiment_list = [True]
 
     for time_steps in time_steps_list:
         for batch_size in batch_size_list:
@@ -253,13 +258,15 @@ def GridSearchTraining():
                                 for level2_units in level2_units_list:
                                     for scale_type in scale_type_list:
                                         for wavelet_transform_iterations in wavelet_transform_iterations_list:
-                                            SingleTraining(time_steps=time_steps, batch_size=batch_size,
-                                                           epochs=epochs, dropout_rate=dropout_rate, l2_reg_rate=l2_reg_rate,
-                                                           level1_units=level1_units, level2_units=level2_units,
-                                                           output_directory=data_directory,
-                                                           scale_type=scale_type,
-                                                           wavelet_transform_iterations=wavelet_transform_iterations,
-                                                           save_configuration=True)
+                                            for include_tweets_sentiment in include_tweets_sentiment_list:
+                                                SingleTraining(time_steps=time_steps, batch_size=batch_size,
+                                                               epochs=epochs, dropout_rate=dropout_rate, l2_reg_rate=l2_reg_rate,
+                                                               level1_units=level1_units, level2_units=level2_units,
+                                                               output_directory=data_directory,
+                                                               scale_type=scale_type,
+                                                               wavelet_transform_iterations=wavelet_transform_iterations,
+                                                               include_tweets_sentiment=include_tweets_sentiment,
+                                                               save_configuration=True)
 
 if __name__ == '__main__':
 

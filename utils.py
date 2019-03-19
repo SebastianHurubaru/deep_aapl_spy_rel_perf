@@ -19,7 +19,7 @@ from keras.backend import clear_session
 
 from keras_extensions import root_mean_square_error, theil_u, pearson_r, custom_epsilon_mean_absolute_percentage_error
 
-from globals import global_sae_batch_size
+from globals import global_sae_batch_size, tweets_sentiment_feature_index
 
 
 def read_data_set_pair(features_file, labels_file):
@@ -78,7 +78,7 @@ def create_time_window_dataset(input_data, time_steps, batch_size):
 
 def load_and_transform_data(features_file, labels_file, time_steps, batch_size,
                             scale_type, scaler_X = None, scaler_Y = None,
-                            wavelet_transform_iterations=0, encode_features=False,
+                            wavelet_transform_iterations=0, encode_features=False, include_tweets_sentiment=False,
                             adjust_to_multiple_of_batch_size=True):
     """
     Given a set of files for features and labels, it reads the content for each and returns a tuple X, Y to be fed to the model
@@ -93,6 +93,7 @@ def load_and_transform_data(features_file, labels_file, time_steps, batch_size,
         scaler_Y -- if provided it uses it to scale the labels, i.e. the Y
         wavelet_transform_iterations -- number of times to perform the wavelet single level discrete transformation
         encode_features -- whether to use the stacked auto encoders for the features
+        include_tweets_sentiment -- whether to include tweets sentiment as feature
         adjust_to_multiple_of_batch_size -- reduces the samples number to divide to the batch_size without a remainder,
         which is required for a stateful LSTM
 
@@ -137,7 +138,7 @@ def load_and_transform_data(features_file, labels_file, time_steps, batch_size,
         for j in range(0, wavelet_transform_iterations):
             coefficients = pywt.wavedec(x[:, i], 'db2', mode='symmetric', level=None, axis=0)
             coefficients_transformed = []
-            # get the aproximation coeffiecients which are not thresholded
+            # get the approximation coeffiecients which are not thresholded
             coefficients_transformed.append(coefficients[0])
             # transform the details coefficients by removing the ones more than a full standard deviation away
             for detail_coefficient in coefficients[1:]:
@@ -148,14 +149,20 @@ def load_and_transform_data(features_file, labels_file, time_steps, batch_size,
 
             x[:, i] = temp_array[:n]
 
+    if include_tweets_sentiment == False:
+        # make the column 0
+        x[:, tweets_sentiment_feature_index] = 0
+
     x, _ = create_time_window_dataset(x, time_steps=time_steps, batch_size=batch_size)
     _, y = create_time_window_dataset(y, time_steps=time_steps, batch_size=batch_size)
+
 
     if encode_features == True:
 
         x, _ = run_function_in_separate_process(generate_encoded_features_from_saved_model, x,
                                                 'models', time_steps, scale_type,
-                                                wavelet_transform_iterations)
+                                                wavelet_transform_iterations,
+                                                include_tweets_sentiment)
 
     if adjust_to_multiple_of_batch_size == True:
         # adjust the number of samples to divide to the batch_size and have the model train faster
@@ -165,7 +172,7 @@ def load_and_transform_data(features_file, labels_file, time_steps, batch_size,
     return x, y, scaler_X, scaler_Y
 
 
-def generate_encoded_features_from_saved_model(x, input_directory, time_steps, scale_type, wavelet_transform_iterations):
+def generate_encoded_features_from_saved_model(x, input_directory, time_steps, scale_type, wavelet_transform_iterations, include_tweets_sentiment):
     """
 
     function that loads the right stacked autoencoder model based on the parameters given and generates an array of encoded features
@@ -176,6 +183,7 @@ def generate_encoded_features_from_saved_model(x, input_directory, time_steps, s
         time_steps -- time steps used to shape the data. Hyperparameter used when training the SAE model
         scale_type -- scale type used to transform the data. Hyperparameter used when training the SAE model
         wavelet_transform_iterations -- number of wavelet transformations performed on the features data. Hyperparameter used when training the SAE model
+        include_tweets_sentiment -- use tweets sentiment or not
 
     Returns:
 
@@ -185,7 +193,8 @@ def generate_encoded_features_from_saved_model(x, input_directory, time_steps, s
 
     model = load_stacked_autoencoder_model(input_directory=input_directory, time_steps=time_steps,
                                            scale_type=scale_type,
-                                           wavelet_transformation_iterations=wavelet_transform_iterations)
+                                           wavelet_transformation_iterations=wavelet_transform_iterations,
+                                           include_tweets_sentiment=include_tweets_sentiment)
 
     encoded_x = generate_encoded_features(model, x)
 
@@ -271,7 +280,7 @@ def load_prediction_model(output_directory):
     return model
 
 
-def load_stacked_autoencoder_model(input_directory, time_steps, scale_type, wavelet_transformation_iterations):
+def load_stacked_autoencoder_model(input_directory, time_steps, scale_type, wavelet_transformation_iterations, include_tweets_sentiment):
     """
 
     Loads the stacked autoencoder model based on the parameters given
@@ -282,6 +291,7 @@ def load_stacked_autoencoder_model(input_directory, time_steps, scale_type, wave
         time_steps -- time steps used to shape the data. Hyperparameter used when training the SAE model
         scale_type -- scale type used to transform the data. Hyperparameter used when training the SAE model
         wavelet_transform_iterations -- number of wavelet transformations performed on the features data. Hyperparameter used when training the SAE model
+        include_tweets_sentiment -- include tweets sentiment or not
 
     Returns:
 
@@ -290,7 +300,7 @@ def load_stacked_autoencoder_model(input_directory, time_steps, scale_type, wave
     """
 
     # load the full model in h5 format
-    model = load_model(input_directory + '/sae_model_' + str(time_steps) + '_' + str(scale_type) + '_' + str(wavelet_transformation_iterations) + '.h5')
+    model = load_model(input_directory + '/sae_model_' + str(time_steps) + '_' + str(scale_type) + '_' + str(wavelet_transformation_iterations) + '_' + str(include_tweets_sentiment) + '.h5')
 
     print("Loaded stacked auto encoder model from disk")
 
@@ -317,14 +327,23 @@ def generate_encoded_features(model, x):
     return predictions
 
 
-def plot_real_vs_predicted_data(real_output, predicted_output):
+def plot_real_vs_predicted_data(sequence_model,
+                                real_output,
+                                predicted_model_wave_sae_tweets_output,
+                                predicted_model_wave_sae_output,
+                                predicted_model_wave_output,
+                                predicted_model_output):
 
     """
     Plots the real against predicted values with a bloomberg-like dark background
 
     Arguments:
+        sequence_model -- model used: GRU or LSTM
         real_output  -- array with real data
-        predicted_output  -- array with predicted data
+        predicted_model_wave_sae_tweets_output  -- array with predicted data from the tweets sae wavelet model
+        predicted_model_wave_sae_output -- array with predicted data from the sae wavelet model
+        predicted_model_wave_output -- array with predicted data from the wavelet model
+        predicted_model_output -- array with predicted data from the model
 
     Returns:
     """
@@ -333,12 +352,17 @@ def plot_real_vs_predicted_data(real_output, predicted_output):
     params = plt.gcf()
     plSize = params.get_size_inches()
     params.set_size_inches((plSize[0] * 4, plSize[1] * 2))
-    plt.plot(predicted_output, color='r')
-    plt.plot(real_output, color='y')
+    plt.plot(real_output, color='black')
+    plt.plot(predicted_model_output, color='yellow')
+    plt.plot(predicted_model_wave_output, color='blue')
+    plt.plot(predicted_model_wave_sae_output, color='green')
+    plt.plot(predicted_model_wave_sae_tweets_output, color='red')
+
     plt.title('Real vs Predicted')
     plt.ylabel('Relative performance')
     plt.xlabel('Days')
-    plt.legend(['Predicted', 'Real'], loc='upper right')
+    plt.legend(['Real', sequence_model, 'Wavelet ' + sequence_model,
+                'SAE Wavelet ' + sequence_model, 'Tweets SAE Wavelet ' + sequence_model], loc='upper right')
 
     plt.show()
 
@@ -347,7 +371,7 @@ def plot_real_vs_predicted_data(real_output, predicted_output):
 
 def create_data_directory(output_directory, epochs=None, batch_size=None, stateful=None,
                           model_type=None, rnn_units=None, level1_units=None, level2_units=None, time_steps=None,
-                          scale_type=None, wavelet_transform_iterations=None, encode_features=None):
+                          scale_type=None, wavelet_transform_iterations=None, encode_features=None, include_tweets_sentiment=None):
     """
     Creates a timestamp and hyperparameters based directory if required
 
@@ -364,6 +388,7 @@ def create_data_directory(output_directory, epochs=None, batch_size=None, statef
         scale_type -- value of the scale_type hyperparameter used
         wavelet_transform_iterations -- value of the wavelet_transform_iterations hyperparameter used
         encode_features -- value of the encode_features hyperparameter used
+        include_tweets_sentiment -- value of the include tweets sentiment hyperparameter used
 
 
     Returns:
@@ -407,6 +432,9 @@ def create_data_directory(output_directory, epochs=None, batch_size=None, statef
 
     if encode_features != None:
         data_folder_name = data_folder_name + "_" + str(encode_features)
+
+    if include_tweets_sentiment != None:
+        data_folder_name = data_folder_name + "_" + str(include_tweets_sentiment)
 
     os.makedirs(data_folder_name)
 
@@ -487,7 +515,7 @@ def run_function_in_separate_process(func, *args):
     result, error = process(func, *args)
     return result, error
 
-def compute_score(y_pred, r):
+def compute_score(y_train, y_pred, r):
 
     """
 
@@ -495,7 +523,8 @@ def compute_score(y_pred, r):
 
     Arguments:
 
-        y_pred -- predictions. Values scaled to be between [-1, 1]
+        y_train -- the training labels to create the scales
+        y_pred -- predictions.
         r -- relative market return
 
     Returns:
@@ -505,41 +534,86 @@ def compute_score(y_pred, r):
 
     """
 
-    x_t = y_pred * r
+    # scale the predicted values to be between [-1, 1]
+    # by using two scaler for positive and negative values
+    # to preserve the sign
+    scaler_pos = MinMaxScaler(feature_range=(0, 1))
+    scaler_pos = scaler_pos.fit(y_train)
 
-    score = np.mean(x_t) / np.std(x_t)
+    scaler_neg = MinMaxScaler(feature_range=(-1, 0))
+    scaler_neg = scaler_neg.fit(y_train)
+
+    scaled_y_pred = np.copy(y_pred)
+    for i in range(len(y_pred)):
+        if y_pred[i] >= 0:
+            scaled_y_pred[i] = scaler_pos.transform(np.asarray(y_pred[i]).reshape((1, -1)))
+        elif y_pred[i] < 0:
+            scaled_y_pred[i] = scaler_neg.transform(np.asarray(y_pred[i]).reshape((1, -1)))
+
+    # compute the score using the scaled values
+    x_t = scaled_y_pred * r
+
+    #  adjust by 10 days returns adjustments
+    score = np.mean(x_t) / np.std(x_t) * np.sqrt(10)
 
     return score
 
-def compute_profitability(y_true, y_pred):
+
+def compute_profitability(y_pred, x_spy, x_aapl):
+    """
+    Computes a buy_or_sell trading stategy based on the predictions.
+
+    Arguments:
+        y_pred -- predictions for the relative performance.
+        x_spy -- real SPY price
+        x_aapl -- real Apple price
+
+    Returns:
+        score - the profitability
+    """
+
+    length_y = len(y_pred)
+    strategy_earnings = 0
+    tran_cost_rate = 0.0001
+
+    for i in range(length_y):
+        if y_pred[i] > 0:
+            difference = x_aapl[i + 1] - x_aapl[i] + x_spy[i] - x_spy[i + 1]
+        elif y_pred[i] < 0:
+            difference = -(x_aapl[i + 1] - x_aapl[i] + x_spy[i] - x_spy[i + 1])
+
+        strategy_earnings += (difference + tran_cost_rate * (x_aapl[i + 1] + x_spy[i + 1] + x_aapl[i] + x_spy[i])) / (x_aapl[i] + x_spy[i])
+
+    strategy_earnings = 100 * strategy_earnings
+
+    return strategy_earnings
+
+def compute_profitability_old(rel_performance, x_spy, x_aapl):
     """
 
     Computes a buy_or_sell trading stategy based on the predictions.
 
     Arguments:
 
-        y_pred -- predictions.
-        y_true -- real values
+        rel_performance -- predictions.
+        x_spy -- daily closing prices for SPY
+        x_aapl -- daily closing prices for AAPL
 
     Returns:
 
-        score - the computed score
+        pred_profit - the daily profit and loss using the predictions
+        real_profit - the daily profit and loss using the real values
 
     """
 
-    length_y = len(y_true)
-    strategy_earnings = 0
-    tran_cost_rate = 0.0001
+    pred_profit = np.zeros(np.shape(rel_performance))
+    real_profit = np.zeros(np.shape(rel_performance))
 
-    for i in range(length_y - 1):
-        if y_pred[i + 1] < y_true[i]:
-            difference = y_true[i] - y_true[i + 1]
-        elif y_pred[i + 1] >= y_true[i]:
-            difference = y_true[i + 1] - y_true[i]
+    for i in range(len(rel_performance)):
+        pred_profit[i] = np.abs(x_spy[i + 1] / x_spy[i] * (rel_performance[i] + 1) - 1)
+        real_profit[i] = np.abs(x_aapl[i + 1] / x_aapl[i] - 1)
 
-        strategy_earnings += (difference + tran_cost_rate * (y_true[i + 1] + y_true[i])) / y_true[i]
+    #return pred_profit, real_profit
 
-    strategy_earnings = 100 * strategy_earnings
-
-    return strategy_earnings
+    return np.sum(pred_profit, axis=0)
 

@@ -306,9 +306,13 @@ for tweets in tweets_df['tweets']:
             print("BERT failed for " + daily_tweets.__str__())
             daily_sentiment_predictions.append(0)
 
-    sentiments.append(np.asarray(daily_sentiment_predictions).mean())
+    average_daily_sentiment = np.asarray(daily_sentiment_predictions).mean()
 
-print(sentiments.__str__())
+    with open('data/pre-processed/tweet_sentiments_checkpoint.txt', 'a') as f:
+        f.write("%.6f\n" %
+                (average_daily_sentiment))
+
+    sentiments.append(average_daily_sentiment)
 
 tweets_df['average_sentiment'] = sentiments
 

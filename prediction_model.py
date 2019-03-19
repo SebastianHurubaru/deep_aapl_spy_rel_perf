@@ -10,7 +10,7 @@ from keras_extensions import root_mean_square_error, theil_u, pearson_r, custom_
 
 from globals import features, encoded_features, labels, base_dir, number_of_gpus
 from globals import global_batch_size, global_encode_features, global_time_steps, global_units\
-    , global_model_type, global_epochs, global_wavelet_transform_iterations, global_dropout_rate, global_stateful, global_scale_type
+    , global_model_type, global_epochs, global_wavelet_transform_iterations, global_dropout_rate, global_stateful, global_scale_type, global_include_tweets_sentiment
 from utils import create_data_directory, load_and_transform_data, save_model_with_additional_data, \
     load_additional_data, load_prediction_model, run_function_in_separate_process, plot_real_vs_predicted_data
 
@@ -76,7 +76,7 @@ def create_sequence_model(model_type, number_of_features, time_steps, batch_size
 def Training(model,
              train_X, train_Y, dev_X, dev_Y,
              time_steps, batch_size, stateful, epochs, model_type, units, dropout_rate,
-             scale_type, wavelet_transform_iterations, encode_features,
+             scale_type, wavelet_transform_iterations, encode_features, include_tweets_sentiment,
              output_directory):
     """
     Trains the model, evaluates it separately on the train and dev set to get
@@ -99,6 +99,7 @@ def Training(model,
         dropout_rate -- dropout rate, i.e. fraction of the input units to drop
         wavelet_transform_iterations -- value of wavelet_transform_iterations hyperparameter used, i.e. the number of times to apply wavelet transformation
         encode_features -- whether to encode the features or not
+        include_tweets_sentiment -- use tweets sentiment or not
 
         output_directory -- directory where to save plot and statistics data
 
@@ -116,19 +117,21 @@ def Training(model,
               shuffle=True)
 
     scores = model.evaluate(x=train_X, y=train_Y, batch_size=batch_size)
-    rmse_train, theil_u_train, R_train, mape_train = scores[1], scores[2], scores[3], scores[4]
+    rmse_train, theil_u_train, pearson_r_train, mape_train = scores[1], scores[2], scores[3], scores[4]
 
     scores = model.evaluate(x=dev_X, y=dev_Y, batch_size=batch_size)
-    rmse_dev, theil_u_dev, R_dev, mape_dev = scores[1], scores[2], scores[3], scores[4]
+    rmse_dev, theil_u_dev, pearson_r_dev, mape_dev = scores[1], scores[2], scores[3], scores[4]
 
     with open(output_directory + '/stats.txt', 'a') as f:
-        f.write("%s: Train - %.6f %.6f %.6f %.6f Dev - %.6f %.6f %.6f %.6f Stateful: %s Time_steps: %d Batch size: %d Epochs: %d Model: %s Units: %d dropout rate: %.1f Scale type: %s Wavelet transform iterations: %d Encode features: %s\n" %
-                (model.metrics_names[1], rmse_train, mape_train, theil_u_train, R_train, rmse_dev, mape_dev, theil_u_dev, R_dev,
-                 str(stateful), time_steps, batch_size, epochs, model_type, units, dropout_rate, scale_type, wavelet_transform_iterations, str(encode_features)))
+        f.write("%s %s %s %s: Train - %.6f %.6f %.6f %.6f Dev - %.6f %.6f %.6f %.6f Stateful: %s Time_steps: %d Batch size: %d Epochs: %d Model: %s Units: %d dropout rate: %.2f Scale type: %s Wavelet transform iterations: %d Encode features: %s Include tweets sentiment: %s\n" %
+                (model.metrics_names[1], model.metrics_names[2], model.metrics_names[3], model.metrics_names[4],
+                 rmse_train, theil_u_train, pearson_r_train, mape_train,
+                 rmse_dev, theil_u_dev, pearson_r_dev, mape_dev,
+                 str(stateful), time_steps, batch_size, epochs, model_type, units, dropout_rate, scale_type, wavelet_transform_iterations, str(encode_features), str(include_tweets_sentiment)))
 
 
 def SingleTraining(time_steps, batch_size, stateful, epochs, model_type, units, dropout_rate,
-                   scale_type, wavelet_transform_iterations, encode_features,
+                   scale_type, wavelet_transform_iterations, encode_features, include_tweets_sentiment,
                    output_directory, save_configuration):
     """
     Wrapper function over Training that previously loads the training and dev sets
@@ -147,6 +150,7 @@ def SingleTraining(time_steps, batch_size, stateful, epochs, model_type, units, 
         scale_type -- type of scaling the data. Only Normalization and Standardization are supported
         wavelet_transform_iterations -- number of times to perform wavelet transformation on the input
         encode_features -- use encoded features or not
+        include_tweets_sentiment -- use the tweets sentiment or not
 
         output_directory -- directory where to save plot and statistics data.
         If save_configuration parameter is False the directory is created here using the local hyperparameter values
@@ -169,7 +173,8 @@ def SingleTraining(time_steps, batch_size, stateful, epochs, model_type, units, 
                                                  epochs=epochs, model_type=model_type, rnn_units=units,
                                                  scale_type=scale_type,
                                                  wavelet_transform_iterations=wavelet_transform_iterations,
-                                                 encode_features=encode_features)
+                                                 encode_features=encode_features,
+                                                 include_tweets_sentiment=include_tweets_sentiment)
 
 
 
@@ -180,11 +185,13 @@ def SingleTraining(time_steps, batch_size, stateful, epochs, model_type, units, 
     train_x, train_y, scaler_X, scaler_Y = load_and_transform_data('data/train_X.csv', 'data/train_Y.csv', time_steps=time_steps, batch_size=batch_size,
                                                                    scale_type=scale_type, scaler_X=None, scaler_Y=None,
                                                                    wavelet_transform_iterations=wavelet_transform_iterations, encode_features=encode_features,
+                                                                   include_tweets_sentiment=include_tweets_sentiment,
                                                                    adjust_to_multiple_of_batch_size=adjust_to_multiple_of_batch_size)
 
     dev_x, dev_y, _, _ = load_and_transform_data('data/dev_test_X.csv', 'data/dev_test_Y.csv', time_steps=time_steps, batch_size=batch_size,
                                                  scale_type=scale_type, scaler_X=scaler_X, scaler_Y=scaler_Y,
                                                  wavelet_transform_iterations=wavelet_transform_iterations, encode_features=encode_features,
+                                                 include_tweets_sentiment=include_tweets_sentiment,
                                                  adjust_to_multiple_of_batch_size=adjust_to_multiple_of_batch_size)
 
     model = None
@@ -198,6 +205,7 @@ def SingleTraining(time_steps, batch_size, stateful, epochs, model_type, units, 
                                          scale_type,
                                          wavelet_transform_iterations,
                                          encode_features,
+                                         include_tweets_sentiment,
                                          output_directory,
                                          save_configuration)
 
@@ -209,6 +217,7 @@ def SingleTraining(time_steps, batch_size, stateful, epochs, model_type, units, 
                                     scale_type,
                                     wavelet_transform_iterations,
                                     encode_features,
+                                    include_tweets_sentiment,
                                     output_directory,
                                     save_configuration)
 
@@ -225,6 +234,7 @@ def CreateAndTrainModel(train_X, train_Y, dev_X, dev_Y,
                         scale_type,
                         wavelet_transform_iterations,
                         encode_features,
+                        include_tweets_sentiment,
                         output_directory, save_configuration):
     """
 
@@ -247,6 +257,7 @@ def CreateAndTrainModel(train_X, train_Y, dev_X, dev_Y,
         scale_type -- type of scaling the data. Only Normalization and Standardization are supported
         wavelet_transform_iterations -- number of times to perform wavelet transformation on the input
         encode_features -- use encoded features or not
+        include_tweets_sentiment -- use tweets sentiment or not
 
         output_directory -- directory where to save plot and statistics data.
         If save_configuration parameter is False the directory is created here using the local hyperparameter values
@@ -277,6 +288,7 @@ def CreateAndTrainModel(train_X, train_Y, dev_X, dev_Y,
              scale_type=scale_type,
              wavelet_transform_iterations=wavelet_transform_iterations,
              encode_features=encode_features,
+             include_tweets_sentiment=include_tweets_sentiment,
              output_directory=output_directory)
 
     #Due to the custom RMSE function when running the function in a separate process
@@ -304,6 +316,7 @@ def SingleTrainingWithGlobalVariables():
                    scale_type=global_scale_type,
                    wavelet_transform_iterations=global_wavelet_transform_iterations,
                    encode_features=global_encode_features,
+                   include_tweets_sentiment=global_include_tweets_sentiment,
                    save_configuration=True)
 
 def GridSearchTraining():
@@ -325,13 +338,14 @@ def GridSearchTraining():
     time_steps_list = [1]
     batch_size_list = [64]
     stateful_list = [False]
-    epochs_list = [2000]
+    epochs_list = [5000]
     model_types_list = ['gru', 'lstm']
     rnn_units_list = [128]
     dropout_rate_list = [0, 0.15]
     scale_type_list = ['normal']
     wavelet_transform_iterations_list = [0, 2]
     encode_features_list = [False, True]
+    include_tweets_sentiment_list = [False, True]
 
     for time_steps in time_steps_list:
         for batch_size in batch_size_list:
@@ -343,13 +357,15 @@ def GridSearchTraining():
                                 for scale_type in scale_type_list:
                                     for wavelet_transform_iterations in wavelet_transform_iterations_list:
                                         for encode_features in encode_features_list:
-                                            SingleTraining(time_steps=time_steps, batch_size=batch_size, stateful=stateful,
-                                                           epochs=epochs, model_type=model_type, units=rnn_units, dropout_rate=dropout_rate,
-                                                           output_directory=data_directory,
-                                                           scale_type=scale_type,
-                                                           wavelet_transform_iterations=wavelet_transform_iterations,
-                                                           encode_features=encode_features,
-                                                           save_configuration=False)
+                                            for include_tweets_sentiment in include_tweets_sentiment_list:
+                                                SingleTraining(time_steps=time_steps, batch_size=batch_size, stateful=stateful,
+                                                               epochs=epochs, model_type=model_type, units=rnn_units, dropout_rate=dropout_rate,
+                                                               output_directory=data_directory,
+                                                               scale_type=scale_type,
+                                                               wavelet_transform_iterations=wavelet_transform_iterations,
+                                                               encode_features=encode_features,
+                                                               include_tweets_sentiment=include_tweets_sentiment,
+                                                               save_configuration=False)
 
 
 def SingleEvaluation(features_file, labels_file):
@@ -376,9 +392,10 @@ def SingleEvaluation(features_file, labels_file):
 
     # Based on the scale type apply on the training set the scaling and applying it after to dev and train sets
     x, y, _, _ = load_and_transform_data(features_file, labels_file, time_steps=global_time_steps, batch_size=global_batch_size,
-                                                                   scale_type=global_scale_type, scaler_X=scaler_X, scaler_Y=scaler_Y,
-                                                                   wavelet_transform_iterations=global_wavelet_transform_iterations, encode_features=global_encode_features,
-                                                                   adjust_to_multiple_of_batch_size=adjust_to_multiple_of_batch_size)
+                                         scale_type=global_scale_type, scaler_X=scaler_X, scaler_Y=scaler_Y,
+                                         wavelet_transform_iterations=global_wavelet_transform_iterations, encode_features=global_encode_features,
+                                         include_tweets_sentiment=global_include_tweets_sentiment,
+                                         adjust_to_multiple_of_batch_size=adjust_to_multiple_of_batch_size)
 
     model = load_prediction_model('models')
 
