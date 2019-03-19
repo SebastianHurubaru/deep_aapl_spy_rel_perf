@@ -4,12 +4,12 @@ CS230 Winter 2019: Prediction of Apple shares relative relative performance to S
 
 We have generated in total a number of eight models:
 
-    -> GRU/LSTM - a single layer of GRU/LSTM with 128 units
-    -> Wavelet GRU/Wavelet LSTM - the previous model with performing two wavelet transformation on the features
-    -> SAE Wavelet GRU/SAE Wavelet LSTM - the model above with encoding the twenty features in only ten deep features 
-    -> Tweets SAE Wavelet GRU/Tweets SAE Wavelet LSTM - the model above with adding extracted sentiment from the daily tweets as feature
+    - GRU/LSTM: a single layer of GRU/LSTM with 128 units
+    - Wavelet GRU/Wavelet LSTM: the previous model with performing two wavelet transformation on the features
+    - SAE Wavelet GRU/SAE Wavelet LSTM: the model above with encoding the twenty features in only ten deep features 
+    - Tweets SAE Wavelet GRU/Tweets SAE Wavelet LSTM: the model above with adding extracted sentiment from the daily tweets as feature
 
-The project is structured in the followings
+The project is structured in the followings:
 
   - /data: folder containing the datasets in original and then pre-processed to fit the models
   - /output: contains automatically created folders with the some models and their associated scalers
