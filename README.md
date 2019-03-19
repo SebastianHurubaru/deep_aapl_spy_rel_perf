@@ -1,8 +1,8 @@
 # Apple relative performance to S&P 500 model prediction with Keras
 
-# Authors: Sebastian Hurubaru, Ruben Ignacio Contesti, Jun Yan
-
 CS230 Winter 2019: Prediction of Apple shares relative relative performance to SPY
+
+Contributors: Sebastian Hurubaru, Ruben Ignacio Contesti, Jun Yan
 
 We have generated in total a number of eight models:
   -  GRU/LSTM: a single layer of GRU/LSTM with 128 units
